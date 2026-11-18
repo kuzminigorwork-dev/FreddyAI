@@ -16,7 +16,7 @@ android {
         minSdk = 26
         targetSdk = 35
         // Версия задаётся в одном месте; versionCode выводится из неё: 2.2.0 → 20200.
-        val ver = providers.gradleProperty("freddy.version").orNull ?: "2.2.0"
+        val ver = providers.gradleProperty("freddy.version").orNull ?: "2.2.1"
         val nums = ver.split('.').map { it.toInt() } + listOf(0, 0)
         versionCode = nums[0] * 10000 + nums[1] * 100 + nums[2]
         versionName = ver
