@@ -109,6 +109,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        Updater.refresh()
+    }
+
     override fun onStop() {
         super.onStop()
         Wake.stop(); Ears.cancel()

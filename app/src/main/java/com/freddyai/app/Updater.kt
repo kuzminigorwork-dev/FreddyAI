@@ -86,7 +86,8 @@ object Updater {
                     http.newCall(Request.Builder().url("$API/repos/$REPO/releases/latest").header("Accept", "application/vnd.github+json")
                         .header("User-Agent", "FreddyAI/$current").build()).execute().use { r ->
                         if (r.code == 404) throw ApiError(404, "На GitHub пока нет опубликованных версий.")
-                        if (r.code == 403 || r.code == 429) throw ApiError(r.code, "GitHub временно ограничил проверки. Попробуй позже.")
+                        // Лимит API (60 запросов в час на адрес) — узнаём версию по ссылке на страницу релиза.
+                        if (r.code == 403 || r.code == 429) return@use fallback()
                         if (!r.isSuccessful) throw ApiError(r.code, "Не удалось проверить обновления (${r.code}).")
                         r.body!!.string()
                     }
@@ -104,6 +105,31 @@ object Updater {
             } finally { checking = false }
         }
     }
+
+    /**
+     * Запасной путь без API: github.com/<repo>/releases/latest перенаправляет на страницу тега,
+     * а APK лежит по имени FreddyAI-<версия>.apk (так его называет tools/release.sh).
+     * Возвращает JSON в том же виде, что и API, чтобы дальше всё шло одним путём.
+     */
+    private fun fallback(): String {
+        val client = http.newBuilder().followRedirects(false).build()
+        val tag = client.newCall(Request.Builder().url("https://github.com/$REPO/releases/latest").head().header("User-Agent", "FreddyAI/$current").build())
+            .execute().use { r ->
+                val loc = r.header("Location").orEmpty()
+                if (r.code !in 300..399 || !loc.contains("/releases/tag/")) throw ApiError(r.code, "GitHub временно ограничил проверки. Попробуй позже.")
+                loc.substringAfterLast("/releases/tag/").substringBefore('?')
+            }
+        val ver = tag.removePrefix("v")
+        return JSONObject().put("tag_name", tag).put("body", "").put("html_url", "https://github.com/$REPO/releases/tag/$tag")
+            .put("assets", org.json.JSONArray().put(JSONObject().put("name", "FreddyAI-$ver.apk")
+                .put("browser_download_url", "https://github.com/$REPO/releases/download/$tag/FreddyAI-$ver.apk").put("size", 0))).toString()
+    }
+
+    /** Разрешение на установку; перечитывается при каждом возврате в приложение (из настроек Android). */
+    var allowed by mutableStateOf(true)
+        private set
+
+    fun refresh() { allowed = canInstall() }
 
     fun canInstall(): Boolean = Build.VERSION.SDK_INT < 26 || S.ctx.packageManager.canRequestPackageInstalls()
 
